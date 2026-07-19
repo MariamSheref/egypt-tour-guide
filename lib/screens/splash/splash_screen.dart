@@ -24,7 +24,7 @@ class _SplashScreenState extends State<SplashScreen>
       vsync: this,
       duration: const Duration(seconds: 2),
     );
-
+  
     fadeAnimation = Tween<double>(
       begin: 0,
       end: 1,
@@ -47,8 +47,9 @@ class _SplashScreenState extends State<SplashScreen>
 
     controller.forward();
 
-    Future.delayed(const Duration(seconds: 3), () {
+    Future.delayed(const Duration(seconds: 6), () {
       setState(() {
+        Navigator.pushReplacementNamed(context, '/home');
         loadingWidth = 1;
       });
     });
