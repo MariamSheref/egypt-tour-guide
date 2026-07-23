@@ -32,8 +32,6 @@ flutter:
 
   assets:
     - assets/images/
-    - assets/icons/
-    - assets/vr/
     - assets/images/pyramids.png
     - assets/images/logo.png
     - assets/images/karnak.jpg
