@@ -76,7 +76,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
           // Dark Overlay
           Container(
-            color: Colors.black.withOpacity(0.35),
+            color: Colors.black.withValues(alpha: 0.35),
           ),
 
 
@@ -144,7 +144,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
                         decoration: BoxDecoration(
 
-                          color: Colors.white.withOpacity(0.75),
+                          color: Colors.white.withValues(alpha: 0.75),
 
                           borderRadius:
                               BorderRadius.circular(30),
@@ -240,64 +240,45 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
 
                                 // Next Button
-                                Container(
-
-                                  height: 55,
-
-                                  padding:
-                                      const EdgeInsets.symmetric(
-                                    horizontal: 25,
-                                  ),
-
-
-                                  decoration: BoxDecoration(
-
-                                    gradient:
-                                        const LinearGradient(
-
-                                      colors: [
-
-                                        Color(0xff7c571e),
-
-                                        Color(0xffffcc87),
-
-                                      ],
-
+                                GestureDetector(
+                                  onTap: () => Navigator.pushReplacementNamed(
+                                      context, '/home'),
+                                  child: Container(
+                                    height: 55,
+                                    padding:
+                                        const EdgeInsets.symmetric(
+                                      horizontal: 25,
                                     ),
-
-
-                                    borderRadius:
-                                        BorderRadius.circular(30),
-
-                                  ),
-
-
-
-                                  child: Row(
-                                    children: const [
-
-                                      Text(
-                                        "NEXT",
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight:
-                                              FontWeight.bold,
-                                          letterSpacing: 2,
-                                        ),
+                                    decoration: BoxDecoration(
+                                      gradient:
+                                          const LinearGradient(
+                                        colors: [
+                                          Color(0xff7c571e),
+                                          Color(0xffffcc87),
+                                        ],
                                       ),
-
-
-                                      SizedBox(width: 10),
-
-
-                                      Icon(
-                                        Icons.arrow_forward,
-                                        color: Colors.white,
-                                      )
-
-                                    ],
+                                      borderRadius:
+                                          BorderRadius.circular(30),
+                                    ),
+                                    child: const Row(
+                                      children: [
+                                        Text(
+                                          "NEXT",
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight:
+                                                FontWeight.bold,
+                                            letterSpacing: 2,
+                                          ),
+                                        ),
+                                        SizedBox(width: 10),
+                                        Icon(
+                                          Icons.arrow_forward,
+                                          color: Colors.white,
+                                        ),
+                                      ],
+                                    ),
                                   ),
-
                                 )
 
                               ],
