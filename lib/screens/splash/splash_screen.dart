@@ -47,22 +47,14 @@ class _SplashScreenState extends State<SplashScreen>
 
     controller.forward();
 
-    Future.delayed(const Duration(seconds: 3),
-  () {
-    Navigator.pushReplacementNamed(
-      context,
-      '/onboarding',
-    );
-  },
-);
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) setState(() => loadingWidth = 1.0);
+    });
 
-    Future.delayed(const Duration(seconds: 5), () {
-      // Navigator.pushReplacement(
-      //   context,
-      //   MaterialPageRoute(
-      //     builder: (_) => const HomeScreen(),
-      //   ),
-      // );
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/onboarding');
+      }
     });
   }
 
@@ -102,8 +94,8 @@ class _SplashScreenState extends State<SplashScreen>
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.blue.shade900.withOpacity(0.2),
-                  Colors.blue.shade900.withOpacity(0.7),
+                  Colors.blue.shade900.withValues(alpha: 0.2),
+                  Colors.blue.shade900.withValues(alpha: 0.7),
                 ],
               ),
             ),
@@ -130,7 +122,7 @@ class _SplashScreenState extends State<SplashScreen>
 
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.blue.withOpacity(0.3),
+                        color: Colors.blue.withValues(alpha: 0.3),
                         border: Border.all(
                           color: Colors.white30,
                         ),
@@ -188,7 +180,7 @@ class _SplashScreenState extends State<SplashScreen>
                         boxShadow: [
                           BoxShadow(
                             color: const Color(0xffffcc87)
-                                .withOpacity(0.8),
+                                .withValues(alpha: 0.8),
                             blurRadius: 8,
                           )
                         ],
@@ -228,7 +220,7 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
 
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.08),
+                  color: Colors.white.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(30),
                   border: Border.all(
                     color: Colors.white24,

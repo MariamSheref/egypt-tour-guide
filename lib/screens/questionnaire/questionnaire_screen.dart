@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/themes/app_theme.dart';
+import '../../models/user_preferences.dart';
+import '../../providers/user_provider.dart';
 
 
 class QuestionnaireScreen extends StatefulWidget {
@@ -180,7 +183,7 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
 
             DropdownButtonFormField<String>(
 
-              value: location,
+              initialValue: location,
 
 
               decoration:
@@ -249,7 +252,7 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
 
             DropdownButtonFormField<String>(
 
-              value: availableTime,
+              initialValue: availableTime,
 
 
               decoration:
@@ -460,12 +463,17 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
 
 
 
-                onPressed:(){
-
-
-                  // هنا بعدين نروح recommendation
-
-
+                onPressed: () {
+                  context.read<UserProvider>().savePreferences(
+                        UserPreferences(
+                          age: ageController.text.trim(),
+                          budget: budgetController.text.trim(),
+                          location: location ?? '',
+                          availableTime: availableTime ?? '',
+                          interests: List.from(selectedInterests),
+                        ),
+                      );
+                  Navigator.pushNamed(context, '/recommendation');
                 },
 
 

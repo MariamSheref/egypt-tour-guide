@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/themes/app_theme.dart';
+import '../../providers/user_provider.dart';
 
 
 class ProfileScreen extends StatelessWidget {
@@ -9,7 +11,7 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
+    final prefs = context.watch<UserProvider>().prefs;
 
     return Scaffold(
 
@@ -84,7 +86,7 @@ class ProfileScreen extends StatelessWidget {
                   BoxShadow(
 
                     color:
-                    Colors.black.withOpacity(0.06),
+                    Colors.black.withValues(alpha: 0.06),
 
                     blurRadius:15,
 
@@ -138,7 +140,7 @@ class ProfileScreen extends StatelessWidget {
 
                   Text(
 
-                    "Mariam",
+                    prefs.name,
 
                     style:
                     AppText.headlineLgMobile(
@@ -227,8 +229,7 @@ class ProfileScreen extends StatelessWidget {
               title:
               "Location",
 
-              value:
-              "Cairo, Egypt",
+              value: prefs.location.isEmpty ? 'Not set' : prefs.location,
 
             ),
 
@@ -243,8 +244,7 @@ class ProfileScreen extends StatelessWidget {
               title:
               "Budget",
 
-              value:
-              "500 EGP",
+              value: prefs.budget.isEmpty ? 'Not set' : '${prefs.budget} EGP',
 
             ),
 
@@ -259,8 +259,7 @@ class ProfileScreen extends StatelessWidget {
               title:
               "Available Time",
 
-              value:
-              "Half Day",
+              value: prefs.availableTime.isEmpty ? 'Not set' : prefs.availableTime,
 
             ),
 
@@ -276,8 +275,7 @@ class ProfileScreen extends StatelessWidget {
               title:
               "Interests",
 
-              value:
-              "History, Museums, Culture",
+              value: prefs.interestsLabel,
 
             ),
 
