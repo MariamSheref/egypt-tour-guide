@@ -1,9 +1,11 @@
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/themes/app_theme.dart';
 import '../../models/user_preferences.dart';
 import '../../providers/user_provider.dart';
-
+import '../../services/recommendation_service.dart';
 
 class QuestionnaireScreen extends StatefulWidget {
   const QuestionnaireScreen({super.key});
@@ -13,583 +15,563 @@ class QuestionnaireScreen extends StatefulWidget {
       _QuestionnaireScreenState();
 }
 
-
 class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
+  final _formKey = GlobalKey<FormState>();
 
+  final _budgetController = TextEditingController();
+  final _cityController = TextEditingController();
 
-  final TextEditingController ageController =
-      TextEditingController();
+  String? _duration;
+  String _period = 'Morning';
 
-  final TextEditingController budgetController =
-      TextEditingController();
+  int _people = 1;
+  bool _children = false;
+  int _childrenCount = 0;
 
+  bool _loading = false;
 
-  String? location;
-  String? availableTime;
+  final Set<String> _interests = {};
 
-
-  List<String> selectedInterests = [];
-
-
-  final List<String> interests = [
-
-    "History",
-    "Museums",
-    "Architecture",
-    "Culture",
-    "Adventure",
-    "Photography",
-
+  static const _cities = [
+    'Cairo',
+    'Giza',
+    'Alexandria',
+    'Qalyubia',
+    'Dakahlia',
+    'Sharqia',
+    'Gharbia',
+    'Monufia',
+    'Kafr El Sheikh',
+    'Beheira',
+    'Damietta',
+    'Port Said',
+    'Ismailia',
+    'Suez',
+    'North Sinai',
+    'South Sinai',
+    'Red Sea',
+    'Fayoum',
+    'Beni Suef',
+    'Minya',
+    'Assiut',
+    'Sohag',
+    'Qena',
+    'Luxor',
+    'Aswan',
+    'New Valley',
+    'Matrouh',
   ];
 
+  static const _times = [
+    '2 Hours',
+    '4 Hours',
+    '6 Hours',
+    '8 Hours',
+  ];
 
+  static const _categories = [
+    'History',
+    'Museums',
+    'Architecture',
+    'Culture',
+    'Adventure',
+    'Photography',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+
+    final prefs = context.read<UserProvider>().prefs;
+
+    _budgetController.text = prefs.budget;
+    _cityController.text = prefs.location;
+
+    _duration = _times.contains(prefs.availableTime)
+        ? prefs.availableTime
+        : null;
+
+    _period = prefs.preferredPeriod == 'Evening'
+        ? 'Evening'
+        : 'Morning';
+
+    _people = prefs.familyMembers < 1
+        ? 1
+        : prefs.familyMembers;
+
+    _children = prefs.hasChildren;
+    _childrenCount = _children ? 1 : 0;
+
+    _interests.addAll(prefs.interests);
+  }
+
+  @override
+  void dispose() {
+    _budgetController.dispose();
+    _cityController.dispose();
+    super.dispose();
+  }
+
+  InputDecoration _decoration(
+    String label,
+    IconData icon,
+  ) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(
+        icon,
+        color: AppColors.primary,
+      ),
+      filled: true,
+      fillColor: AppColors.surfaceContainer,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide.none,
+      ),
+    );
+  }
+
+  Widget _heading(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(
+        top: 24,
+        bottom: 12,
+      ),
+      child: Text(
+        text,
+        style: AppText.titleLg(
+          color: AppColors.primary,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    if (_loading) return;
+
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (_children && _childrenCount > _people) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Children count cannot exceed family size',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final budget = double.parse(
+      _budgetController.text.trim(),
+    );
+
+    final availableHours = double.parse(
+      _duration!.split(' ').first,
+    );
+
+    final prefs = UserPreferences(
+      budget: _budgetController.text.trim(),
+      location: _cityController.text.trim(),
+      availableTime: _duration!,
+      preferredPeriod: _period,
+      familyMembers: _people,
+      hasChildren: _children,
+      interests: _interests.toList(),
+    );
+
+    setState(() {
+      _loading = true;
+    });
+
+    try {
+      final result =
+          await RecommendationService().recommend(
+        budget: budget,
+        familySize: _people,
+        childrenCount: _children
+            ? _childrenCount
+            : 0,
+        availableHours: availableHours,
+        period: _period.toLowerCase(),
+      );
+
+      if (!mounted) return;
+
+      final userProvider = context.read<UserProvider>();
+
+      userProvider.savePreferences(prefs);
+      userProvider.saveTripResult(result);
+
+      Navigator.pushNamed(
+        context,
+        '/recommendation',
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not create trip: $e',
+          ),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-
-
     return Scaffold(
-
       backgroundColor: AppColors.surface,
-
-
       appBar: AppBar(
-
-        backgroundColor: AppColors.surface,
-
-        elevation: 0,
-
         title: Text(
-          "Plan Your Journey",
+          'Plan Your Journey',
           style: AppText.titleLg(
             color: AppColors.primary,
           ),
         ),
-
-        iconTheme: const IconThemeData(
-          color: AppColors.primary,
-        ),
-
       ),
-
-
-
-      body: SingleChildScrollView(
-
-        padding: const EdgeInsets.all(
-          AppSpacing.containerMargin,
-        ),
-
-
-        child: Column(
-
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
-
-
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(
+            AppSpacing.containerMargin,
+          ),
           children: [
-
-
-
             Text(
-              "Tell us about yourself",
+              'Build your perfect day',
               style: AppText.headlineLgMobile(
                 color: AppColors.primary,
               ),
             ),
 
-
-
             const SizedBox(height: 8),
 
-
-
             Text(
-              "We will use your preferences to create "
-              "AI-powered heritage recommendations.",
+              'Choose your preferences and '
+              'discover trips based on your '
+              'budget, time and location.',
               style: AppText.bodyMd(),
             ),
 
+            // BUDGET AND LOCATION
 
+            _heading('Budget & location'),
 
-            const SizedBox(
-              height: 30,
-            ),
-
-
-
-
-
-            // Age
-
-            buildTextField(
-
-              controller: ageController,
-
-              label: "Age",
-
-              icon: Icons.person_outline,
-
-              keyboard:
-              TextInputType.number,
-
-            ),
-
-
-
-            const SizedBox(height:20),
-
-
-
-
-
-            // Budget
-
-            buildTextField(
-
-              controller: budgetController,
-
-              label: "Budget (EGP)",
-
-              icon:
-              Icons.account_balance_wallet_outlined,
-
-              keyboard:
-              TextInputType.number,
-
-            ),
-
-
-
-
-            const SizedBox(height:20),
-
-
-
-
-
-            // Location
-
-            Text(
-              "Your Location",
-              style: AppText.titleLg(
-                color: AppColors.primary,
+            TextFormField(
+              controller: _budgetController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(
+                decimal: true,
               ),
+              decoration: _decoration(
+                'Total budget (EGP)',
+                Icons.wallet_outlined,
+              ),
+              validator: (value) {
+                final amount = double.tryParse(
+                  value?.trim() ?? '',
+                );
+
+                if (amount == null ||
+                    !amount.isFinite ||
+                    amount <= 0) {
+                  return 'Enter a valid budget greater than zero';
+                }
+
+                return null;
+              },
             ),
 
+            const SizedBox(height: 14),
 
-            const SizedBox(height:10),
-
-
-            DropdownButtonFormField<String>(
-
-              initialValue: location,
-
-
-              decoration:
-              inputDecoration(
+            TextFormField(
+              controller: _cityController,
+              textCapitalization:
+                  TextCapitalization.words,
+              decoration: _decoration(
+                'Your current governorate / city',
                 Icons.location_on_outlined,
+              ).copyWith(
+                helperText:
+                    'Enter your city. GPS will be used '
+                    'to calculate nearby places.',
+                helperMaxLines: 2,
               ),
+              validator: (value) {
+                if (value == null ||
+                    value.trim().isEmpty) {
+                  return 'Enter your starting location';
+                }
 
-
-              items:[
-
-                "Cairo",
-                "Giza",
-                "Luxor",
-                "Aswan",
-                "Alexandria",
-
-              ].map((city){
-
-                return DropdownMenuItem(
-
-                  value:city,
-
-                  child:Text(city),
-
-                );
-
-              }).toList(),
-
-
-              onChanged:(value){
-
-                setState(() {
-
-                  location=value;
-
-                });
-
+                return null;
               },
-
             ),
 
-
-
-
-
-            const SizedBox(height:20),
-
-
-
-
-            // Time
-
+            const SizedBox(height: 12),
 
             Text(
-              "Available Time",
-              style: AppText.titleLg(
-                color: AppColors.primary,
+              'Or choose a governorate:',
+              style: AppText.bodyMd(),
+            ),
+
+            const SizedBox(height: 8),
+
+            SizedBox(
+              height: 110,
+              child: SingleChildScrollView(
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: _cities.map((city) {
+                    return ActionChip(
+                      label: Text(city),
+                      onPressed: () {
+                        setState(() {
+                          _cityController.text = city;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
               ),
             ),
 
+            // FAMILY
 
+            _heading('Who is coming?'),
 
-            const SizedBox(height:10),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Number of people '
+                    '(including children)',
+                  ),
+                ),
 
+                IconButton(
+                  onPressed: _people > 1
+                      ? () {
+                          setState(() {
+                            _people--;
 
+                            if (_childrenCount > _people) {
+                              _childrenCount = _people;
+                            }
+                          });
+                        }
+                      : null,
+                  icon: const Icon(
+                    Icons.remove_circle_outline,
+                  ),
+                ),
+
+                Text(
+                  '$_people',
+                  style: AppText.titleLg(
+                    color: AppColors.primary,
+                  ),
+                ),
+
+                IconButton(
+                  onPressed: _people < 20
+                      ? () {
+                          setState(() {
+                            _people++;
+                          });
+                        }
+                      : null,
+                  icon: const Icon(
+                    Icons.add_circle_outline,
+                  ),
+                ),
+              ],
+            ),
+
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text(
+                'Traveling with children',
+              ),
+              subtitle: const Text(
+                'Prioritize family-friendly places',
+              ),
+              value: _children,
+              onChanged: (value) {
+                setState(() {
+                  _children = value;
+                  _childrenCount = value ? 1 : 0;
+                });
+              },
+            ),
+
+            if (_children) ...[
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Number of children',
+                    ),
+                  ),
+
+                  IconButton(
+                    onPressed: _childrenCount > 1
+                        ? () {
+                            setState(() {
+                              _childrenCount--;
+                            });
+                          }
+                        : null,
+                    icon: const Icon(
+                      Icons.remove_circle_outline,
+                    ),
+                  ),
+
+                  Text(
+                    '$_childrenCount',
+                    style: AppText.titleLg(
+                      color: AppColors.primary,
+                    ),
+                  ),
+
+                  IconButton(
+                    onPressed: _childrenCount < _people
+                        ? () {
+                            setState(() {
+                              _childrenCount++;
+                            });
+                          }
+                        : null,
+                    icon: const Icon(
+                      Icons.add_circle_outline,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
+            // TIME
+
+            _heading('When would you like to go?'),
 
             DropdownButtonFormField<String>(
-
-              initialValue: availableTime,
-
-
-              decoration:
-              inputDecoration(
-                Icons.access_time,
+              initialValue: _duration,
+              isExpanded: true,
+              decoration: _decoration(
+                'Available time',
+                Icons.access_time_outlined,
               ),
-
-
-
-              items:[
-
-                "1-2 Hours",
-                "Half Day",
-                "Full Day",
-                "Multiple Days",
-
-              ].map((time){
-
-                return DropdownMenuItem(
-
-                  value:time,
-
-                  child:Text(time),
-
+              items: _times.map((time) {
+                return DropdownMenuItem<String>(
+                  value: time,
+                  child: Text(time),
                 );
-
               }).toList(),
-
-
-
-              onChanged:(value){
-
+              onChanged: (value) {
                 setState(() {
-
-                  availableTime=value;
-
+                  _duration = value;
                 });
-
               },
+              validator: (value) {
+                if (value == null) {
+                  return 'Select available time';
+                }
 
-
+                return null;
+              },
             ),
 
+            const SizedBox(height: 16),
 
-
-
-
-            const SizedBox(height:30),
-
-
-
-
-
-
-            Text(
-
-              "Your Interests",
-
-              style: AppText.titleLg(
-                color: AppColors.primary,
-              ),
-
+            SegmentedButton<String>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: 'Morning',
+                  label: Text('Morning'),
+                ),
+                ButtonSegment(
+                  value: 'Evening',
+                  label: Text('Evening'),
+                ),
+              ],
+              selected: {_period},
+              onSelectionChanged: (values) {
+                setState(() {
+                  _period = values.first;
+                });
+              },
             ),
 
+            // INTERESTS
 
-
-
-            const SizedBox(height:15),
-
-
-
+            _heading('Your interests (optional)'),
 
             Wrap(
-
-              spacing:10,
-
-              runSpacing:10,
-
-
-              children: interests.map((interest){
-
-
-                bool selected =
-                selectedInterests.contains(
-                  interest,
-                );
-
-
-
+              spacing: 8,
+              runSpacing: 8,
+              children: _categories.map((interest) {
                 return FilterChip(
-
-
-                  label:Text(
-                    interest,
-                  ),
-
-
-                  selected:selected,
-
-
-                  selectedColor:
-                  AppColors.secondaryContainer,
-
-
-
-                  backgroundColor:
-                  AppColors.surfaceContainer,
-
-
-
-                  labelStyle:
-                  TextStyle(
-
-                    color:selected
-                    ? AppColors.onSecondaryContainer
-                    : AppColors.onSurfaceVariant,
-
-                    fontWeight:
-                    FontWeight.w500,
-
-                  ),
-
-
-
-                  onSelected:(value){
-
-
+                  label: Text(interest),
+                  selected:
+                      _interests.contains(interest),
+                  onSelected: (checked) {
                     setState(() {
-
-
-                      if(value){
-
-                        selectedInterests.add(
-                          interest,
-                        );
-
+                      if (checked) {
+                        _interests.add(interest);
+                      } else {
+                        _interests.remove(interest);
                       }
-                      else{
-
-                        selectedInterests.remove(
-                          interest,
-                        );
-
-                      }
-
-
                     });
-
-
                   },
-
-
                 );
-
               }).toList(),
-
-
             ),
 
+            const SizedBox(height: 32),
 
+            // SUBMIT BUTTON
 
-
-
-            const SizedBox(height:40),
-
-
-
-
-
-
-            // Button
-
-
-            Container(
-
-              width:double.infinity,
-
-              height:55,
-
-
-              decoration:BoxDecoration(
-
-                gradient:
-                AppColors.goldGradient,
-
-
-                borderRadius:
-                BorderRadius.circular(
-                  AppRadius.full,
-                ),
-
-              ),
-
-
-
-              child:ElevatedButton(
-
-                style:
-                ElevatedButton.styleFrom(
-
-                  backgroundColor:
-                  Colors.transparent,
-
-                  shadowColor:
-                  Colors.transparent,
-
-                ),
-
-
-
-                onPressed: () {
-                  context.read<UserProvider>().savePreferences(
-                        UserPreferences(
-                          age: ageController.text.trim(),
-                          budget: budgetController.text.trim(),
-                          location: location ?? '',
-                          availableTime: availableTime ?? '',
-                          interests: List.from(selectedInterests),
+            SizedBox(
+              height: 54,
+              child: ElevatedButton.icon(
+                onPressed: _loading
+                    ? null
+                    : _submit,
+                icon: _loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
                         ),
-                      );
-                  Navigator.pushNamed(context, '/recommendation');
-                },
-
-
-
-                child:Text(
-
-                  "Find My Journey",
-
-                  style:
-                  AppText.titleLg(
-                    color:Colors.white,
-                  ),
-
+                      )
+                    : const Icon(Icons.route),
+                label: Text(
+                  _loading
+                      ? 'Creating your trip...'
+                      : 'Find My Trip',
                 ),
-
               ),
-
-
             ),
 
-
-
+            const SizedBox(height: 20),
           ],
-
         ),
-
       ),
-
-
     );
-
   }
-
-
-
-
-
-
-
-  Widget buildTextField({
-
-    required TextEditingController controller,
-
-    required String label,
-
-    required IconData icon,
-
-    TextInputType? keyboard,
-
-  }){
-
-
-    return TextField(
-
-      controller:controller,
-
-      keyboardType:keyboard,
-
-
-      decoration:
-      inputDecoration(icon)
-          .copyWith(
-            labelText:label,
-          ),
-
-
-    );
-
-  }
-
-
-
-
-
-
-
-  InputDecoration inputDecoration(
-      IconData icon
-      ){
-
-    return InputDecoration(
-
-      prefixIcon:
-      Icon(
-        icon,
-        color:AppColors.primary,
-      ),
-
-
-      filled:true,
-
-
-      fillColor:
-      AppColors.surfaceContainer,
-
-
-
-      border:
-      OutlineInputBorder(
-
-        borderRadius:
-        BorderRadius.circular(
-          AppRadius.full,
-        ),
-
-
-        borderSide:
-        BorderSide.none,
-
-
-      ),
-
-
-    );
-
-  }
-
-
 }

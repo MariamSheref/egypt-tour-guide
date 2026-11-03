@@ -14,6 +14,7 @@ class PyramidDetailsScreen extends StatelessWidget {
     final String image = args?['image'] ?? 'assets/images/pyramids.png';
     final String rating = args?['rating'] ?? '4.9';
     final String price = args?['price'] ?? '300 EGP';
+    final String category = args?['category'] ?? 'Heritage';
     final String description = args?['description'] ??
         'The Giza Necropolis stands as a testament to the architectural prowess '
             "of the Old Kingdom's Fourth Dynasty. As the only remaining wonder "
@@ -101,8 +102,8 @@ class PyramidDetailsScreen extends StatelessWidget {
                                   color: AppColors.secondaryContainer,
                                   borderRadius: BorderRadius.circular(20),
                                 ),
-                                child: const Text(
-                                  'UNESCO World Heritage',
+                                child: Text(
+                                  category,
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
@@ -110,7 +111,7 @@ class PyramidDetailsScreen extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              Text('⭐ $rating',
+                              if (rating != '—') Text('Rating: $rating',
                                   style: const TextStyle(fontSize: 12)),
                             ],
                           ),
@@ -152,10 +153,10 @@ class PyramidDetailsScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(20),
                         ),
                       ),
-                      onPressed: () => _showComingSoon(context, 'AR Experience'),
-                      icon: const Icon(Icons.view_in_ar, color: Colors.white),
+                      onPressed: () => Navigator.pushNamed(context, '/vr', arguments: name),
+                      icon: const Icon(Icons.vrpano, color: Colors.white),
                       label: const Text(
-                        'Start AR Experience',
+                        'View VR Tour',
                         style: TextStyle(color: Colors.white, fontSize: 18),
                       ),
                     ),

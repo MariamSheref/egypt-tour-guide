@@ -9,6 +9,7 @@ class UserProvider extends ChangeNotifier {
 
   void savePreferences(UserPreferences prefs) {
     _prefs = prefs;
+    _tripResult = null;
     notifyListeners();
   }
 
@@ -28,4 +29,12 @@ class UserProvider extends ChangeNotifier {
         }),
       );
   }
+  Map<String, dynamic>? _tripResult;
+
+Map<String, dynamic>? get tripResult => _tripResult;
+
+void saveTripResult(Map<String, dynamic> result) {
+  _tripResult = result;
+  notifyListeners();
+}
 }

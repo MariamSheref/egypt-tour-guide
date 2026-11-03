@@ -10,6 +10,7 @@ import 'screens/questionnaire/questionnaire_screen.dart';
 import 'screens/recommendation/recommendation_screen.dart';
 import 'screens/details/pyramid_details_screen.dart';
 import 'screens/profile/profile_screen.dart';
+import 'screens/vr/vr_screen.dart';
 
 class SmartHeritageApp extends StatelessWidget {
   const SmartHeritageApp({super.key});
@@ -30,6 +31,7 @@ class SmartHeritageApp extends StatelessWidget {
           '/recommendation': (context) => const RecommendationScreen(),
           '/details': (context) => const PyramidDetailsScreen(),
           '/profile': (context) => const ProfileScreen(),
+          '/vr': (context) => const VrScreen(),
         },
       ),
     );

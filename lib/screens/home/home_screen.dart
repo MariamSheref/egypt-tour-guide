@@ -15,6 +15,27 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _navIndex = 0;
+  final _searchController = TextEditingController();
+  String _search = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+  String _category = 'All Sites';
+
+  List<HeritagePlace> get _visiblePlaces {
+    final query = _search.trim().toLowerCase();
+    return HeritagePlace.all.where((place) {
+      final matchesCategory = _category == 'All Sites' || place.category == _category;
+      final matchesSearch = query.isEmpty ||
+          place.name.toLowerCase().contains(query) ||
+          place.location.toLowerCase().contains(query) ||
+          place.category.toLowerCase().contains(query);
+      return matchesCategory && matchesSearch;
+    }).toList();
+  }
 
   void _onNavTap(int index) {
     if (index == 1) {
@@ -31,6 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final prefs = context.watch<UserProvider>().prefs;
+    final visible = _visiblePlaces;
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -86,8 +108,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
               // Search Bar
               TextField(
+                controller: _searchController,
+                onChanged: (value) => setState(() => _search = value),
                 decoration: InputDecoration(
-                  hintText: 'Search ancient wonders...',
+                  hintText: 'Search places, governorates, categories...',
                   prefixIcon: const Icon(Icons.search),
                   filled: true,
                   fillColor: AppColors.surfaceContainer,
@@ -100,7 +124,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 25),
 
-              const CategoryChips(),
+              CategoryChips(
+                selectedCategory: _category,
+                onSelected: (value) => setState(() => _category = value),
+              ),
 
               const SizedBox(height: 30),
 
@@ -109,31 +136,51 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      'AI-Recommended Wonders',
+                      'Discover Heritage Places',
                       style: AppText.titleLg(color: AppColors.primary),
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () =>
-                        Navigator.pushNamed(context, '/recommendation'),
-                    child: Text(
-                      'See all',
-                      style: AppText.bodyMd(color: AppColors.secondary),
-                    ),
+                  Text(
+                    '${visible.length} of ${HeritagePlace.all.length}',
+                    style: AppText.bodyMd(color: AppColors.secondary),
                   ),
                 ],
               ),
 
               const SizedBox(height: 15),
 
-              SizedBox(
+              const Text(
+                'Browse catalog preview. Some places still need verified prices, photos and opening times.',
+                style: TextStyle(fontSize: 12, color: Colors.black54),
+              ),
+              const SizedBox(height: 12),
+              if (visible.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 35),
+                  child: Center(child: Column(children: [
+                    const Icon(Icons.search_off, size: 44, color: Colors.grey),
+                    const SizedBox(height: 10),
+                    const Text('No places match your search and filters.'),
+                    TextButton(onPressed: () => setState(() {
+                      _searchController.clear();
+                      _search = '';
+                      _category = 'All Sites';
+                    }), child: const Text('Clear category filter')),
+                  ])),
+                )
+              else
+                SizedBox(
                 height: 420,
-                child: ListView(
+                child: ListView.separated(
                   scrollDirection: Axis.horizontal,
-                  children: HeritagePlace.all
-                      .take(3)
-                      .map((place) => _RecommendationCard(place: place))
-                      .toList(),
+                  itemCount: visible.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(width: 16),
+                  itemBuilder: (context, index) {
+                    return _RecommendationCard(
+                      place: visible[index],
+                    );
+                  },
                 ),
               ),
 
@@ -162,7 +209,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: AppText.titleLg(color: Colors.white),
                           ),
                           Text(
-                            'Get AI-powered recommendations',
+                            'Set your budget, time and travel group',
                             style: AppText.bodyMd(color: Colors.white70),
                           ),
                         ],
@@ -207,18 +254,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+
 class _RecommendationCard extends StatelessWidget {
   final HeritagePlace place;
-  const _RecommendationCard({required this.place});
+
+  const _RecommendationCard({
+    required this.place,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () =>
-          Navigator.pushNamed(context, '/details', arguments: place.toMap()),
+      onTap: () => Navigator.pushNamed(
+        context,
+        '/details',
+        arguments: place.toMap(),
+      ),
       child: Container(
         width: 280,
-        margin: const EdgeInsets.only(right: 16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppRadius.md),
           image: DecorationImage(
@@ -233,7 +286,10 @@ class _RecommendationCard extends StatelessWidget {
             gradient: const LinearGradient(
               begin: Alignment.bottomCenter,
               end: Alignment.topCenter,
-              colors: [Colors.black54, Colors.transparent],
+              colors: [
+                Colors.black87,
+                Colors.transparent,
+              ],
             ),
           ),
           child: Column(
@@ -242,20 +298,29 @@ class _RecommendationCard extends StatelessWidget {
             children: [
               Text(
                 place.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 8),
               Text(
-                place.location,
-                style: const TextStyle(color: Colors.white70),
+                place.governorate,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
               ),
+              const SizedBox(height: 6),
               Text(
-                '⭐ ${place.rating}',
-                style: const TextStyle(color: Colors.white),
+                place.category,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                ),
               ),
             ],
           ),
@@ -264,3 +329,4 @@ class _RecommendationCard extends StatelessWidget {
     );
   }
 }
+
