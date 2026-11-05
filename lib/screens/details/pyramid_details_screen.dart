@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../data/official_booking_links.dart';
 import '../../core/themes/app_theme.dart';
+import '../../widgets/landmark_image.dart';
 
 class PyramidDetailsScreen extends StatelessWidget {
   const PyramidDetailsScreen({super.key});
@@ -15,6 +18,7 @@ class PyramidDetailsScreen extends StatelessWidget {
     final String rating = args?['rating'] ?? '4.9';
     final String price = args?['price'] ?? '300 EGP';
     final String category = args?['category'] ?? 'Heritage';
+    final bookingUrl = officialBookingFor(name);
     final String description = args?['description'] ??
         'The Giza Necropolis stands as a testament to the architectural prowess '
             "of the Old Kingdom's Fourth Dynasty. As the only remaining wonder "
@@ -71,15 +75,8 @@ class PyramidDetailsScreen extends StatelessWidget {
               // Hero Image
               Stack(
                 children: [
-                  Container(
-                    height: 530,
-                    decoration: BoxDecoration(
-                      image: DecorationImage(
-                        image: AssetImage(image),
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
+                  LandmarkImage(name: name, fallback: image,
+                    height: 530, width: double.infinity),
                   Positioned(
                     bottom: 20,
                     left: 20,
@@ -171,13 +168,26 @@ class PyramidDetailsScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 15),
-                        Expanded(
-                          child: _ActionButton(
-                            icon: Icons.confirmation_number,
-                            label: 'Book Tickets',
-                            onTap: () => _showComingSoon(context, 'Booking'),
+                        if (bookingUrl != null) ...[
+                          const SizedBox(width: 15),
+                          Expanded(
+                            child: _ActionButton(
+                              icon: Icons.confirmation_number,
+                              label: 'Book Tickets',
+                              onTap: () async {
+                                final launched = await launchUrl(
+                                  Uri.parse(bookingUrl),
+                                  mode: LaunchMode.externalApplication,
+                                );
+                                if (!launched && context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Could not open the official ticket website')),
+                                  );
+                                }
+                              },
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ],

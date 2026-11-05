@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from payments import router as payments_router
+from booking_links import official_booking
 from pydantic import BaseModel, Field, model_validator
 
 DATA_PATH = Path(__file__).with_name('places.csv')
@@ -109,6 +112,7 @@ class Place:
     lat: float
     lon: float
     adult_price: float
+    foreign_price: float | None
     duration: int
     hours: str
     windows: tuple[tuple[int, int], ...]
@@ -133,16 +137,14 @@ def load_places():
             windows = opening_windows(row.get('Opening Hours'))
             if price is None or duration is None or not windows:
                 continue
-            link = (row.get('Official Booking Link') or '').strip()
-            # Do not represent an instruction like 'search site name' as a direct booking link.
-            if 'search site name' in link.lower():
-                link = ''
+            link = official_booking(row['Site Name'].strip(), price)
             places.append(Place(
                 name=row['Site Name'].strip(), governorate=row['Governorate'].strip(),
                 city=row['City/Area'].strip(), lat=lat, lon=lon,
-                adult_price=price, duration=duration, hours=row['Opening Hours'],
+                adult_price=price, foreign_price=numeric_price(row.get('Price - Foreigner Adult (EGP)')),
+                duration=duration, hours=row['Opening Hours'],
                 windows=tuple(windows), kind=(row.get('Type') or '').strip(),
-                suitability=family_suitability(row), booking=link or None
+                suitability=family_suitability(row), booking=link
             ))
     return places
 
@@ -158,10 +160,12 @@ class TripRequest(BaseModel):
     children_count: int = Field(default=0, ge=0)
     available_hours: float = Field(gt=0, le=16)
     period: Literal['morning', 'evening'] = 'morning'
+    visitor_type: Literal['egyptian', 'international'] = 'egyptian'
     start_time: str | None = None  # HH:MM 24-hour. Defaults: 09:00 / 18:00.
     max_radius_km: float = Field(default=DEFAULT_MAX_RADIUS_KM, gt=0, le=150)
     max_stops: int = Field(default=4, ge=1, le=6)
     number_of_trips: int = Field(default=3, ge=1, le=10)
+    excluded_places: list[str] = Field(default_factory=list, max_length=140)
 
     @model_validator(mode='after')
     def check(self):
@@ -182,10 +186,18 @@ def make_trips(req: TripRequest):
     if start + available_min > 24 * 60:
         raise HTTPException(status_code=422, detail='Trip end must be on the same calendar day')
 
+    # Adult prices vary by visitor category. Currency remains EGP; foreign visitors
+    # with missing foreign prices are excluded, not silently charged local prices.
+    def visitor_price(place):
+        return place.foreign_price if req.visitor_type == 'international' else place.adult_price
+
     # Strictly keep places inside radius of the USER, not just nearby each other.
-    candidates = [(p, haversine(req.latitude, req.longitude, p.lat, p.lon)) for p in PLACES]
+    excluded = {name.strip().casefold() for name in req.excluded_places}
+    candidates = [(p, haversine(req.latitude, req.longitude, p.lat, p.lon))
+                  for p in PLACES if p.name.casefold() not in excluded]
     candidates = [(p, d) for p, d in candidates
-                  if d <= req.max_radius_km and req.family_size * p.adult_price <= req.budget_egp]
+                  if d <= req.max_radius_km and visitor_price(p) is not None
+                  and req.family_size * visitor_price(p) <= req.budget_egp]
     candidates.sort(key=lambda item: item[1])
     candidates = candidates[:MAX_CANDIDATES]
 
@@ -209,7 +221,7 @@ def make_trips(req: TripRequest):
                 return_km = haversine(p.lat, p.lon, req.latitude, req.longitude)
                 # Include return-to-origin travel in the total time and distance.
                 return_min = transfer_minutes(return_km)
-                new_cost = cost + p.adult_price * req.family_size
+                new_cost = cost + visitor_price(p) * req.family_size
                 if leave + return_min > start + available_min or new_cost > req.budget_egp:
                     continue
                 if not fits_opening(p.windows, arrive, leave):
@@ -221,9 +233,12 @@ def make_trips(req: TripRequest):
                     'arrival_time': fmt_clock(arrive), 'departure_time': fmt_clock(leave),
                     'visit_minutes': p.duration, 'travel_from_previous_minutes': travel,
                     'distance_from_previous_km': round(km, 2),
-                    'entry_cost_egp': round(p.adult_price * req.family_size, 2),
+                    'entry_price_per_person_egp': round(visitor_price(p), 2),
+                    'entry_cost_egp': round(visitor_price(p) * req.family_size, 2),
                     'opening_hours_source': p.hours, 'family_suitability_heuristic': p.suitability,
                     'booking_link': p.booking,
+                    'booking_available': bool(p.booking),
+                    'entry_is_free': visitor_price(p) == 0,
                 }]
                 new_used = used + (idx,)
                 new_dist = dist + km
@@ -237,6 +252,8 @@ def make_trips(req: TripRequest):
                     '_signature': frozenset(new_used), '_score': score,
                     'stops': new_stops,
                     'total_entry_cost_egp': round(new_cost, 2),
+                    'group_budget_egp': round(req.budget_egp, 2),
+                    'family_size': req.family_size,
                     'remaining_budget_egp': round(req.budget_egp - new_cost, 2),
                     'total_duration_minutes': total_duration,
                     'return_to_origin_minutes': return_min,
@@ -263,20 +280,29 @@ def make_trips(req: TripRequest):
             break
     return {
         'trips': trips, 'matched_locations': len(candidates),
+        'request_context': req.model_dump(),
         'warnings': [
             'Prices in the dataset may be outdated; confirm before booking.',
+            'Ticket estimates use the selected Egyptian/international adult rate in EGP; actual concessions differ.',
             'Children are budgeted at the adult admission rate as a conservative estimate; child-specific rates are unavailable.',
+            'The submitted budget is the TOTAL for the entire group, not a per-person budget.',
             'Budget covers entrance tickets only, NOT transport, meals or guide fees.',
             'Travel times are rough straight-line-distance estimates, NOT road-routing or live traffic.',
             'Family suitability is a text-based heuristic, NOT verified child safety/accessibility.',
             'Opening hours are interpreted from the dataset and do NOT include holidays or date-specific changes.',
             'Places with unknown price, duration, hours, or coordinates are excluded.',
-            'Routes use a limited beam search and are not guaranteed globally optimal.'
+            'Routes use a limited beam search and are not guaranteed globally optimal.',
+            'Book Tickets links lead to the venue official portal. The app does not sell entrance tickets.'
         ],
     }
 
 
 app = FastAPI(title='Egypt Family Trip Planner', version='1.0')
+# Development localhost origin only; set explicit origins before deployment.
+app.add_middleware(CORSMiddleware,
+    allow_origin_regex=r'http://(localhost|127\.0\.0\.1):[0-9]+',
+    allow_methods=['GET', 'POST'], allow_headers=['Content-Type'])
+app.include_router(payments_router)
 
 
 @app.get('/health')
@@ -287,3 +313,68 @@ def health():
 @app.post('/recommend')
 def recommend(request: TripRequest):
     return make_trips(request)
+
+
+# Manual trip starting point. Never uses GPS or device location permissions.
+# The returned point is an approximation based on dataset site coordinates.
+# Precise addresses require a separate geocoding provider.
+class LocationRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+
+
+_AR_GOV = {
+    'القاهرة':'Cairo', 'الجيزة':'Giza', 'الاسكندرية':'Alexandria', 'الإسكندرية':'Alexandria',
+    'المنيا':'Minya', 'بني سويف':'Beni Suef', 'الفيوم':'Fayoum', 'أسيوط':'Assiut',
+    'اسيوط':'Assiut', 'سوهاج':'Sohag', 'قنا':'Qena', 'الأقصر':'Luxor', 'اسوان':'Aswan',
+    'أسوان':'Aswan', 'البحر الأحمر':'Red Sea', 'مطروح':'Matrouh', 'الوادي الجديد':'New Valley',
+    'بورسعيد':'Port Said', 'دمياط':'Damietta', 'الإسماعيلية':'Ismailia', 'الاسماعيلية':'Ismailia',
+    'السويس':'Suez', 'شمال سيناء':'North Sinai', 'جنوب سيناء':'South Sinai',
+    'القليوبية':'Qalyubia', 'الدقهلية':'Dakahlia', 'الشرقية':'Sharqia',
+    'الغربية':'Gharbia', 'المنوفية':'Monufia', 'كفر الشيخ':'Kafr El Sheikh',
+    'البحيرة':'Beheira', 'ملوي':'Mallawi', 'مالوي':'Mallawi',
+}
+
+
+def _location_key(text: str) -> str:
+    text = text.strip().casefold().replace('’', "'")
+    return re.sub(r'[^\w\u0621-\u064a]+', '', text)
+
+
+def resolve_manual_location(name: str):
+    term = _AR_GOV.get(name.strip(), name.strip())
+    term = {'Assiut':'Asyut', 'Assiout':'Asyut', 'Mallawi':'Minya', 'Malawi':'Minya', 'Qalyubia':'Cairo'}.get(term, term)
+    key = _location_key(term)
+    rows = []
+    with DATA_PATH.open('r', encoding='utf-8-sig', newline='') as source:
+        rows = list(csv.DictReader(source))
+    # Prefer matching named city/area; fallback to governorate-level tourist-area centroid.
+    for col in ('City/Area', 'Governorate'):
+        matched = [row for row in rows if _location_key(row.get(col, '')) == key]
+        valid = []
+        for row in matched:
+            try:
+                lat, lon = float(row['Latitude']), float(row['Longitude'])
+                if -90 <= lat <= 90 and -180 <= lon <= 180:
+                    valid.append((lat, lon))
+            except (TypeError, ValueError, KeyError):
+                pass
+        if valid:
+            # Mean coordinates are an approximation, not user's exact location.
+            return {'name': term, 'latitude': round(sum(x[0] for x in valid) / len(valid), 6),
+                    'longitude': round(sum(x[1] for x in valid) / len(valid), 6),
+                    'precision': 'approximate_city_area' if col == 'City/Area' else 'approximate_governorate',
+                    'note': 'Approximate start point from landmark coordinates; not your current position.'}
+    raise HTTPException(status_code=404, detail='Location not in our current dataset. Choose a listed governorate or city.')
+
+
+@app.get('/locations/choices')
+def location_choices():
+    with DATA_PATH.open('r', encoding='utf-8-sig', newline='') as source:
+        rows = list(csv.DictReader(source))
+    return {'governorates': sorted({r['Governorate'].strip() for r in rows if r.get('Governorate')}),
+            'cities': sorted({r['City/Area'].strip() for r in rows if r.get('City/Area')})}
+
+
+@app.post('/locations/resolve')
+def manual_location(body: LocationRequest):
+    return resolve_manual_location(body.name)

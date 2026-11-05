@@ -5,6 +5,7 @@ import '../../core/themes/app_theme.dart';
 import '../../models/heritage_place.dart';
 import '../../providers/user_provider.dart';
 import '../../widgets/category_chips.dart';
+import '../../widgets/landmark_image.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -49,6 +50,13 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _navIndex = index);
   }
 
+  Widget _drawerItem(BuildContext context, IconData icon, String text, String route) {
+    return ListTile(
+      leading: Icon(icon, color: AppColors.primary), title: Text(text),
+      onTap: () { Navigator.pop(context); if (route != '/home') Navigator.pushNamed(context, route); },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final prefs = context.watch<UserProvider>().prefs;
@@ -56,6 +64,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surface,
+      drawer: Drawer(
+        child: SafeArea(child: ListView(children: [
+          const UserAccountsDrawerHeader(
+            accountName: Text('Egypt Tour Guide'),
+            accountEmail: Text('Discover Egypt your way'),
+            currentAccountPicture: CircleAvatar(child: Icon(Icons.travel_explore, size: 32)),
+          ),
+          _drawerItem(context, Icons.home_outlined, 'Home', '/home'),
+          _drawerItem(context, Icons.route_outlined, 'Plan a journey', '/questionnaire'),
+          _drawerItem(context, Icons.explore_outlined, 'My recommended trips', '/recommendation'),
+          const Divider(),
+          _drawerItem(context, Icons.workspace_premium_outlined, 'Monthly plans', '/subscriptions'),
+          _drawerItem(context, Icons.receipt_long_outlined, 'Payment status', '/payment-history'),
+          const Divider(),
+          _drawerItem(context, Icons.person_outline, 'Profile', '/profile'),
+          _drawerItem(context, Icons.vrpano_outlined, 'Virtual tours (coming soon)', '/vr'),
+          _drawerItem(context, Icons.info_outline, 'About', '/about'),
+        ])),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.containerMargin),
@@ -68,7 +95,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.menu, color: AppColors.primary),
+                      Builder(builder: (drawerContext) => IconButton(
+                        icon: const Icon(Icons.menu, color: AppColors.primary),
+                        tooltip: 'Open menu',
+                        onPressed: () => Scaffold.of(drawerContext).openDrawer(),
+                      )),
                       const SizedBox(width: 10),
                       Text(
                         'Smart Heritage',
@@ -270,16 +301,13 @@ class _RecommendationCard extends StatelessWidget {
         '/details',
         arguments: place.toMap(),
       ),
-      child: Container(
+      child: SizedBox(
         width: 280,
-        decoration: BoxDecoration(
+        child: ClipRRect(
           borderRadius: BorderRadius.circular(AppRadius.md),
-          image: DecorationImage(
-            image: AssetImage(place.image),
-            fit: BoxFit.cover,
-          ),
-        ),
-        child: Container(
+          child: Stack(fit: StackFit.expand, children: [
+            LandmarkImage(name: place.name, fallback: place.image),
+            Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppRadius.md),
@@ -324,6 +352,8 @@ class _RecommendationCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+          ]),
         ),
       ),
     );

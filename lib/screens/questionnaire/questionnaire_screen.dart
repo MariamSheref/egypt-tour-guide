@@ -23,6 +23,7 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
 
   String? _duration;
   String _period = 'Morning';
+  String _visitorType = 'egyptian';
 
   int _people = 1;
   bool _children = false;
@@ -100,8 +101,9 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
         : prefs.familyMembers;
 
     _children = prefs.hasChildren;
-    _childrenCount = _children ? 1 : 0;
+    _childrenCount = _children ? prefs.childrenCount.clamp(1, _people) : 0;
 
+    _visitorType = prefs.visitorType == 'international' ? 'international' : 'egyptian';
     _interests.addAll(prefs.interests);
   }
 
@@ -179,9 +181,16 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
       preferredPeriod: _period,
       familyMembers: _people,
       hasChildren: _children,
+      childrenCount: _children ? _childrenCount : 0,
+      visitorType: _visitorType,
       interests: _interests.toList(),
     );
 
+    final account = context.read<UserProvider>();
+    if (!account.hasAccess) {
+      Navigator.pushNamed(context, '/subscriptions');
+      return;
+    }
     setState(() {
       _loading = true;
     });
@@ -189,6 +198,7 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
     try {
       final result =
           await RecommendationService().recommend(
+        city: _cityController.text.trim(),
         budget: budget,
         familySize: _people,
         childrenCount: _children
@@ -196,6 +206,7 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
             : 0,
         availableHours: availableHours,
         period: _period.toLowerCase(),
+        visitorType: _visitorType,
       );
 
       if (!mounted) return;
@@ -259,14 +270,27 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
 
             Text(
               'Choose your preferences and '
-              'discover trips based on your '
-              'budget, time and location.',
+              'discover trips using your chosen '
+              'starting city, budget and time.',
               style: AppText.bodyMd(),
             ),
 
             // BUDGET AND LOCATION
 
             _heading('Budget & location'),
+            DropdownButtonFormField<String>(
+              initialValue: _visitorType,
+              decoration: _decoration('Visitor ticket category', Icons.public),
+              items: const [
+                DropdownMenuItem(value: 'egyptian', child: Text('Egyptian visitor')),
+                DropdownMenuItem(value: 'international', child: Text('International visitor')),
+              ],
+              onChanged: (v) { if (v != null) setState(() => _visitorType = v); },
+            ),
+            const SizedBox(height: 8),
+            const Text('Ticket estimates use the selected adult rate in EGP; verify discounts and current prices at checkout.',
+                style: TextStyle(fontSize: 12, color: Colors.black54)),
+            const SizedBox(height: 14),
 
             TextFormField(
               controller: _budgetController,
@@ -275,8 +299,11 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                 decimal: true,
               ),
               decoration: _decoration(
-                'Total budget (EGP)',
+                'Total group budget (EGP)',
                 Icons.wallet_outlined,
+              ).copyWith(
+                helperText: 'One budget for everyone, not per person. Ticket costs for all travelers must fit inside this amount.',
+                helperMaxLines: 3,
               ),
               validator: (value) {
                 final amount = double.tryParse(
@@ -300,12 +327,11 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
               textCapitalization:
                   TextCapitalization.words,
               decoration: _decoration(
-                'Your current governorate / city',
+                'Starting governorate / city',
                 Icons.location_on_outlined,
               ).copyWith(
                 helperText:
-                    'Enter your city. GPS will be used '
-                    'to calculate nearby places.',
+                    'Choose a city or governorate. No GPS permission is required.',
                 helperMaxLines: 2,
               ),
               validator: (value) {

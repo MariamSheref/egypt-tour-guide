@@ -1,11 +1,87 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../services/recommendation_service.dart';
 
 import '../../providers/user_provider.dart';
+import '../../models/heritage_place.dart';
+import '../../widgets/landmark_image.dart';
 
-class RecommendationScreen extends StatelessWidget {
+class RecommendationScreen extends StatefulWidget {
   const RecommendationScreen({super.key});
+
+  @override
+  State<RecommendationScreen> createState() => _RecommendationScreenState();
+}
+
+class _RecommendationScreenState extends State<RecommendationScreen> {
+  bool _replanning = false;
+  final Set<String> _visitedPlaces = {};
+
+  Future<void> _openBooking(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.scheme != 'https') return;
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the official booking page')),
+      );
+    }
+  }
+
+  Future<void> _replaceVisited(String placeName) async {
+    if (_replanning) return;
+    final consent = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Visited this place?'),
+        content: Text('Mark "$placeName" as visited and create a new trip without it?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Replace place')),
+        ],
+      ),
+    );
+    if (consent != true || !mounted) return;
+    final provider = context.read<UserProvider>();
+    final contextData = provider.tripResult?['request_context'];
+    if (contextData is! Map) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Create a new trip to enable replacement.')),
+      );
+      return;
+    }
+    final nextVisited = {..._visitedPlaces, placeName};
+    setState(() => _replanning = true);
+    try {
+      final updated = await RecommendationService().replan(
+        requestContext: Map<String, dynamic>.from(contextData),
+        excludedNames: nextVisited,
+      );
+      if (!mounted) return;
+      final updatedTrips = updated['trips'];
+      if (updatedTrips is! List || updatedTrips.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No other trip fits the budget, hours and area. Try a longer time or a wider radius.')),
+        );
+        return;
+      }
+      setState(() => _visitedPlaces.add(placeName));
+      provider.saveTripResult(updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('New trip ready — $placeName excluded.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to update trip: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _replanning = false);
+    }
+  }
+
 
   static const Color primaryColor = Color(0xFF163B52);
   static const Color accentColor = Color(0xFFC99746);
@@ -138,6 +214,17 @@ class RecommendationScreen extends StatelessWidget {
                 ),
 
                 const SizedBox(height: 18),
+
+                if (_replanning) ...[
+                  const LinearProgressIndicator(),
+                  const SizedBox(height: 14),
+                  const Text('Finding another trip without your visited places...'),
+                ],
+                if (_visitedPlaces.isNotEmpty) ...[
+                  Text('Visited places excluded: ${_visitedPlaces.join(', ')}',
+                    style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                  const SizedBox(height: 14),
+                ],
 
                 if (trips.isEmpty)
                   _emptyState(
@@ -293,8 +380,20 @@ class RecommendationScreen extends StatelessWidget {
                   runSpacing: 10,
                   children: [
                     _infoChip(
+                      Icons.groups_outlined,
+                      'Group: ${_display(trip['family_size'])} people',
+                    ),
+                    _infoChip(
+                      Icons.account_balance_wallet_outlined,
+                      'Total budget: ${_display(trip['group_budget_egp'])} EGP',
+                    ),
+                    _infoChip(
                       Icons.payments_outlined,
-                      '${_display(trip['total_entry_cost_egp'])} EGP',
+                      'Group tickets: ${_display(trip['total_entry_cost_egp'])} EGP',
+                    ),
+                    _infoChip(
+                      Icons.savings_outlined,
+                      'Remaining ticket budget: ${_display(trip['remaining_budget_egp'])} EGP',
                     ),
                     _infoChip(
                       Icons.access_time,
@@ -385,6 +484,13 @@ class RecommendationScreen extends StatelessWidget {
     bool isLast,
   ) {
     final name = _display(stop['name'], 'Unknown Place');
+    HeritagePlace? photoPlace;
+    for (final place in HeritagePlace.all) {
+      if (place.name.toLowerCase() == name.toLowerCase()) {
+        photoPlace = place;
+        break;
+      }
+    }
 
     return Column(
       children: [
@@ -401,6 +507,16 @@ class RecommendationScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (photoPlace != null) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: LandmarkImage(
+                    name: name, fallback: photoPlace.image,
+                    width: double.infinity, height: 160,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               Row(
                 crossAxisAlignment:
                     CrossAxisAlignment.start,
@@ -474,8 +590,13 @@ class RecommendationScreen extends StatelessWidget {
               ),
 
               _stopInfo(
+                Icons.person_outline,
+                'Ticket per person (estimated)',
+                '${_display(stop['entry_price_per_person_egp'])} EGP',
+              ),
+              _stopInfo(
                 Icons.confirmation_number_outlined,
-                'Entry Tickets',
+                'Tickets for whole group',
                 '${_display(stop['entry_cost_egp'])} EGP',
               ),
 
@@ -487,6 +608,38 @@ class RecommendationScreen extends StatelessWidget {
 
               const SizedBox(height: 10),
 
+              if (stop['booking_link'] is String &&
+                  (stop['booking_link'] as String).startsWith('https://')) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _replanning ? null : () => _openBooking(stop['booking_link'] as String),
+                    icon: const Icon(Icons.confirmation_number_outlined),
+                    label: const Text('Book Tickets — Official Site'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text('Tickets are purchased on the venue website, not in this app.',
+                    style: TextStyle(color: Colors.black54, fontSize: 11)),
+                const SizedBox(height: 10),
+              ] else if (stop['entry_is_free'] == true) ...[
+                const Text('Free entry — no booking needed',
+                  style: TextStyle(color: Colors.green, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 10),
+              ] else ...[
+                const Text('Online booking link not verified; check the venue before visiting.',
+                  style: TextStyle(color: Colors.black54, fontSize: 12)),
+                const SizedBox(height: 10),
+              ],
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _replanning ? null : () => _replaceVisited(name),
+                  icon: const Icon(Icons.swap_horiz),
+                  label: const Text('Visited? Replace in Trip'),
+                ),
+              ),
+              const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
