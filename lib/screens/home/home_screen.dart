@@ -5,6 +5,7 @@ import '../../core/themes/app_theme.dart';
 import '../../models/heritage_place.dart';
 import '../../providers/user_provider.dart';
 import '../../widgets/category_chips.dart';
+import '../../subscription_feature.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,17 +20,28 @@ class _HomeScreenState extends State<HomeScreen> {
   String _search = '';
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => maybeShowSubscribePromo(context),
+    );
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
+
   String _category = 'All Sites';
 
   List<HeritagePlace> get _visiblePlaces {
     final query = _search.trim().toLowerCase();
     return HeritagePlace.all.where((place) {
-      final matchesCategory = _category == 'All Sites' || place.category == _category;
-      final matchesSearch = query.isEmpty ||
+      final matchesCategory =
+          _category == 'All Sites' || place.category == _category;
+      final matchesSearch =
+          query.isEmpty ||
           place.name.toLowerCase().contains(query) ||
           place.location.toLowerCase().contains(query) ||
           place.category.toLowerCase().contains(query);
@@ -37,9 +49,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }).toList();
   }
 
-  void _onNavTap(int index) {
+  Future<void> _onNavTap(int index) async {
     if (index == 1) {
-      Navigator.pushNamed(context, '/questionnaire');
+      if (await requireAccess(context)) {
+        if (!mounted) return;
+        Navigator.pushNamed(context, '/questionnaire');
+      }
       return;
     }
     if (index == 2) {
@@ -157,38 +172,52 @@ class _HomeScreenState extends State<HomeScreen> {
               if (visible.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 35),
-                  child: Center(child: Column(children: [
-                    const Icon(Icons.search_off, size: 44, color: Colors.grey),
-                    const SizedBox(height: 10),
-                    const Text('No places match your search and filters.'),
-                    TextButton(onPressed: () => setState(() {
-                      _searchController.clear();
-                      _search = '';
-                      _category = 'All Sites';
-                    }), child: const Text('Clear category filter')),
-                  ])),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.search_off,
+                          size: 44,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(height: 10),
+                        const Text('No places match your search and filters.'),
+                        TextButton(
+                          onPressed: () => setState(() {
+                            _searchController.clear();
+                            _search = '';
+                            _category = 'All Sites';
+                          }),
+                          child: const Text('Clear category filter'),
+                        ),
+                      ],
+                    ),
+                  ),
                 )
               else
                 SizedBox(
-                height: 420,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: visible.length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(width: 16),
-                  itemBuilder: (context, index) {
-                    return _RecommendationCard(
-                      place: visible[index],
-                    );
-                  },
+                  height: 420,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: visible.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 16),
+                    itemBuilder: (context, index) {
+                      return _RecommendationCard(place: visible[index]);
+                    },
+                  ),
                 ),
-              ),
 
               const SizedBox(height: 20),
 
               // Quick action — plan journey
               GestureDetector(
-                onTap: () => Navigator.pushNamed(context, '/questionnaire'),
+                onTap: () async {
+                  if (await requireAccess(context)) {
+                    if (!context.mounted) return;
+                    Navigator.pushNamed(context, '/questionnaire');
+                  }
+                },
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(AppSpacing.md),
@@ -198,25 +227,37 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.auto_awesome,
-                          color: Color(0xffffcc87), size: 32),
-                      const SizedBox(width: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Plan My Journey',
-                            style: AppText.titleLg(color: Colors.white),
-                          ),
-                          Text(
-                            'Set your budget, time and travel group',
-                            style: AppText.bodyMd(color: Colors.white70),
-                          ),
-                        ],
+                      const Icon(
+                        Icons.auto_awesome,
+                        color: Color(0xffffcc87),
+                        size: 32,
                       ),
-                      const Spacer(),
-                      const Icon(Icons.arrow_forward_ios,
-                          color: Colors.white54, size: 16),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Plan My Journey',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.titleLg(color: Colors.white),
+                            ),
+                            Text(
+                              'Set your budget, time and travel group',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.bodyMd(color: Colors.white70),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.arrow_forward_ios,
+                        color: Colors.white54,
+                        size: 16,
+                      ),
                     ],
                   ),
                 ),
@@ -254,22 +295,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-
 class _RecommendationCard extends StatelessWidget {
   final HeritagePlace place;
 
-  const _RecommendationCard({
-    required this.place,
-  });
+  const _RecommendationCard({required this.place});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.pushNamed(
-        context,
-        '/details',
-        arguments: place.toMap(),
-      ),
+      onTap: () =>
+          Navigator.pushNamed(context, '/details', arguments: place.toMap()),
       child: Container(
         width: 280,
         decoration: BoxDecoration(
@@ -286,10 +321,7 @@ class _RecommendationCard extends StatelessWidget {
             gradient: const LinearGradient(
               begin: Alignment.bottomCenter,
               end: Alignment.topCenter,
-              colors: [
-                Colors.black87,
-                Colors.transparent,
-              ],
+              colors: [Colors.black87, Colors.transparent],
             ),
           ),
           child: Column(
@@ -309,18 +341,12 @@ class _RecommendationCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 place.governorate,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                ),
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
               ),
               const SizedBox(height: 6),
               Text(
                 place.category,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 13),
               ),
             ],
           ),
@@ -329,4 +355,3 @@ class _RecommendationCard extends StatelessWidget {
     );
   }
 }
-

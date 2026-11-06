@@ -1,6 +1,6 @@
+//import 'package:egypt_tour_guide/widgets/subscription_gate.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import 'core/themes/app_theme.dart';
 import 'providers/user_provider.dart';
 import 'screens/splash/splash_screen.dart';
@@ -20,6 +20,8 @@ class SmartHeritageApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => UserProvider(),
       child: MaterialApp(
+        //builder: (context, child) =>
+        // SubscriptionGate(child: child ?? const SizedBox()),
         debugShowCheckedModeBanner: false,
         theme: buildSmartHeritageTheme(),
         initialRoute: '/',

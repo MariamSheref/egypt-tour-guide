@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
 
+/// KemetRa splash screen.
+/// Shows the illustrated splash for a few seconds, then goes to /onboarding.
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  const SplashScreen({
+    super.key,
+    this.onFinish,
+    this.duration = const Duration(milliseconds: 3500),
+  });
+
+  /// Optional. If null, the splash navigates to '/onboarding'.
+  final VoidCallback? onFinish;
+  final Duration duration;
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -9,252 +19,87 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
+  static const _asset = 'assets/images/splash_bg.png';
+  static const _imageAspect = 590 / 1280;
+  static const _sand = Color(0xFFF4D9BE);
 
-  late AnimationController controller;
-  late Animation<double> fadeAnimation;
-  late Animation<double> scaleAnimation;
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: widget.duration,
+  );
 
-  double loadingWidth = 0.5;
+  late final Animation<double> _fadeIn = CurvedAnimation(
+    parent: _c,
+    curve: const Interval(0.0, 0.25, curve: Curves.easeOut),
+  );
+  late final Animation<double> _zoom = Tween<double>(
+    begin: 1.10,
+    end: 1.0,
+  ).animate(CurvedAnimation(parent: _c, curve: Curves.easeOutCubic));
 
-  @override
-  void initState() {
-    super.initState();
+  bool _started = false;
 
-    controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    );
-  
-    fadeAnimation = Tween<double>(
-      begin: 0,
-      end: 1,
-    ).animate(
-      CurvedAnimation(
-        parent: controller,
-        curve: Curves.easeInOut,
-      ),
-    );
-
-    scaleAnimation = Tween<double>(
-      begin: 0.95,
-      end: 1,
-    ).animate(
-      CurvedAnimation(
-        parent: controller,
-        curve: Curves.easeOut,
-      ),
-    );
-
-    controller.forward();
-
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) setState(() => loadingWidth = 1.0);
-    });
-
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/onboarding');
-      }
-    });
+  void _finish() {
+    if (!mounted) return;
+    if (widget.onFinish != null) {
+      widget.onFinish!();
+    } else {
+      Navigator.of(context).pushReplacementNamed('/onboarding');
+    }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    precacheImage(const AssetImage(_asset), context).whenComplete(() {
+      if (!mounted) return;
+      _c.forward().whenComplete(_finish);
+    });
+  }
 
   @override
   void dispose() {
-    controller.dispose();
+    _c.dispose();
     super.dispose();
   }
-
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
+      backgroundColor: _sand,
+      body: LayoutBuilder(
+        builder: (context, box) {
+          final isWide = box.maxWidth / box.maxHeight > 0.75;
 
-          // Background Image
-          Container(
-            width: double.infinity,
-            height: double.infinity,
-            decoration: const BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage(
-                  "assets/images/pyramids.jpg",
-                ),
-                fit: BoxFit.cover,
-              ),
+          Widget art = AnimatedBuilder(
+            animation: _c,
+            builder: (_, child) => Opacity(
+              opacity: _fadeIn.value,
+              child: Transform.scale(scale: _zoom.value, child: child),
             ),
-          ),
-
-
-          // Dark Gradient Overlay
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.blue.shade900.withValues(alpha: 0.2),
-                  Colors.blue.shade900.withValues(alpha: 0.7),
-                ],
-              ),
+            child: Image.asset(
+              _asset,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              filterQuality: FilterQuality.high,
             ),
-          ),
+          );
 
-
-          // Content
-          Center(
-            child: FadeTransition(
-              opacity: fadeAnimation,
-              child: ScaleTransition(
-                scale: scaleAnimation,
-
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-
-
-                    // Logo
-                    Container(
-                      width: 140,
-                      height: 140,
-                      padding: const EdgeInsets.all(12),
-
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.blue.withValues(alpha: 0.3),
-                        border: Border.all(
-                          color: Colors.white30,
-                        ),
-                      ),
-
-                      child: Image.asset(
-                        "assets/images/logo.png",
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-
-
-                    const SizedBox(height: 25),
-
-
-                    // Title
-                    const Text(
-                      "Smart Heritage",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 38,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -1,
-                      ),
-                    ),
-
-
-                    const SizedBox(height: 8),
-
-
-                    // Subtitle
-                    const Text(
-                      "ANCIENT WONDERS. FUTURE DISCOVERY.",
-                      style: TextStyle(
-                        color: Color(0xffffcc87),
-                        fontSize: 12,
-                        letterSpacing: 3,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-
-
-                    const SizedBox(height: 50),
-
-
-                    // Loading Bar
-                    AnimatedContainer(
-                      duration: const Duration(seconds: 1),
-                      width: 250 * loadingWidth,
-                      height: 3,
-
-                      decoration: BoxDecoration(
-                        color: const Color(0xffffcc87),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xffffcc87)
-                                .withValues(alpha: 0.8),
-                            blurRadius: 8,
-                          )
-                        ],
-                      ),
-                    ),
-
-
-                    const SizedBox(height: 20),
-
-
-                    const Text(
-                      "Curating your journey...",
-                      style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 14,
-                      ),
-                    ),
-
-                  ],
-                ),
+          if (isWide) {
+            art = Center(
+              child: AspectRatio(
+                aspectRatio: _imageAspect,
+                child: ClipRect(child: art),
               ),
-            ),
-          ),
-
-
-          // Bottom Badge
-          Positioned(
-            bottom: 40,
-            left: 0,
-            right: 0,
-
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(
-                    color: Colors.white24,
-                  ),
-                ),
-
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-
-                    Icon(
-                      Icons.verified,
-                      color: Color(0xffffcc87),
-                      size: 16,
-                    ),
-
-                    SizedBox(width: 8),
-
-                    Text(
-                      "UNESCO Explorer Verified",
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                        letterSpacing: 1,
-                      ),
-                    ),
-
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-        ],
+            );
+          } else {
+            art = ClipRect(child: art);
+          }
+          return SizedBox.expand(child: art);
+        },
       ),
     );
   }
